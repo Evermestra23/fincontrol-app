@@ -182,6 +182,21 @@ tr:hover td{background:rgba(45,123,255,.04)}
         <div class="stat-val" id="stat-expired" style="color:var(--gold)">—</div>
         <div class="stat-lbl">Vencidos</div>
       </div>
+      <div class="stat-card" data-color="orange" style="cursor:pointer" onclick="document.getElementById('alertas-vencimiento').scrollIntoView({behavior:'smooth'})">
+        <div class="stat-val" id="stat-proximos" style="color:#f97316">—</div>
+        <div class="stat-lbl">⏰ Por vencer</div>
+      </div>
+    </div>
+
+    <!-- Alertas de vencimiento próximo (15 días) -->
+    <div id="alertas-vencimiento" style="display:none;margin-bottom:24px">
+      <div style="background:linear-gradient(135deg,rgba(245,158,11,.12),rgba(245,158,11,.06));border:1px solid rgba(245,158,11,.35);border-radius:14px;padding:18px 22px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+          <span style="font-size:1.3rem">⚠️</span>
+          <span style="font-weight:700;color:var(--gold);font-size:.95rem">Clientes próximos a vencer <span id="alerta-count" style="background:rgba(245,158,11,.2);padding:2px 10px;border-radius:20px;font-size:.8rem;margin-left:4px"></span></span>
+        </div>
+        <div id="alertas-lista" style="display:flex;flex-direction:column;gap:10px"></div>
+      </div>
     </div>
 
     <div class="panel-grid">
@@ -249,6 +264,7 @@ tr:hover td{background:rgba(45,123,255,.04)}
                   <th>Cliente</th>
                   <th>Email</th>
                   <th>Vencimiento</th>
+                  <th>Días restantes</th>
                   <th>Estado</th>
                   <th>Acciones</th>
                 </tr>
@@ -416,7 +432,7 @@ window.crearCliente = async function() {
 
 Tu cuenta en *FinControl* ya está lista. Aquí están tus datos de acceso:
 
-🔗 *Link de acceso:* https://fincontrol-pr.netlify.app
+🔗 *Link de acceso:* https://evermestra23.github.io/fincontrol-app/
 📧 *Usuario:* ${email}
 🔑 *Contraseña:* ${pass}
 ${vencLabel}
@@ -483,27 +499,50 @@ function estadoCliente(c) {
   return c.vencimiento >= hoy ? 'active' : 'expired';
 }
 
+function diasRestantes(vencimiento) {
+  if (!vencimiento || vencimiento === 'indefinido') return null;
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  const venc = new Date(vencimiento + 'T00:00:00');
+  return Math.ceil((venc - hoy) / (1000 * 60 * 60 * 24));
+}
+
 function renderTabla(lista) {
   const tbody = document.getElementById('tabla-body');
   if (!lista.length) {
-    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:36px;color:var(--text3)"><i class="fa fa-users" style="font-size:1.5rem;display:block;margin-bottom:8px"></i>Sin clientes aún</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:36px;color:var(--text3)"><i class="fa fa-users" style="font-size:1.5rem;display:block;margin-bottom:8px"></i>Sin clientes aún</td></tr>`;
     return;
   }
   tbody.innerHTML = lista.map(c => {
     const estado = estadoCliente(c);
+    const dias = diasRestantes(c.vencimiento);
+    const proxVencer = dias !== null && dias >= 0 && dias <= 15;
+    const rowStyle = proxVencer ? 'background:rgba(245,158,11,.06);' : '';
     const badgeClass = estado === 'active' ? 'badge-active' : estado === 'expired' ? 'badge-expired' : 'badge-inactive';
     const badgeLabel = estado === 'active' ? '✅ Activo' : estado === 'expired' ? '⚠️ Vencido' : '⛔ Inactivo';
-    const venc = c.vencimiento === 'indefinido' ? '<span style="color:var(--text2)">Sin vencimiento</span>' : `<span style="color:${estado==='expired'?'var(--gold)':'var(--text)'}">${c.vencimiento}</span>`;
+    const venc = c.vencimiento === 'indefinido'
+      ? '<span style="color:var(--text2)">Sin vencimiento</span>'
+      : `<span style="color:${estado==='expired'?'var(--gold)':'var(--text)'}">${c.vencimiento}</span>`;
+    let diasCell = '<span style="color:var(--text3)">—</span>';
+    if (dias !== null) {
+      if (dias < 0) diasCell = `<span style="color:var(--gold);font-weight:700">Vencido</span>`;
+      else if (dias === 0) diasCell = `<span style="color:#ef4444;font-weight:700">¡Hoy!</span>`;
+      else if (dias <= 7) diasCell = `<span style="color:#ef4444;font-weight:700">⚠️ ${dias}d</span>`;
+      else if (dias <= 15) diasCell = `<span style="color:#f97316;font-weight:700">⏰ ${dias}d</span>`;
+      else diasCell = `<span style="color:var(--text2)">${dias}d</span>`;
+    }
     const toggleBtn = c.activo
       ? `<button class="btn-act btn-toggle-on" onclick="toggleCliente('${c.id}', false)"><i class="fa fa-ban"></i> Desactivar</button>`
       : `<button class="btn-act btn-toggle-off" onclick="toggleCliente('${c.id}', true)"><i class="fa fa-check"></i> Activar</button>`;
-    return `<tr>
-      <td style="font-weight:600">${c.nombre}</td>
+    const renovarBtn = `<button class="btn-act" style="background:rgba(37,211,102,.15);color:#25d366;border:1px solid rgba(37,211,102,.3)" onclick="renovarCliente('${c.id}','${c.nombre}','${c.email}')"><i class="fa fa-sync-alt"></i> Renovar</button>`;
+    return `<tr style="${rowStyle}">
+      <td style="font-weight:600">${proxVencer ? '⏰ ' : ''}${c.nombre}</td>
       <td style="color:var(--text2);font-size:.82rem">${c.email}</td>
       <td>${venc}</td>
+      <td>${diasCell}</td>
       <td><span class="badge ${badgeClass}">${badgeLabel}</span></td>
       <td><div class="action-btns">
         ${toggleBtn}
+        ${renovarBtn}
         <button class="btn-act btn-del" onclick="eliminarCliente('${c.id}','${c.nombre}')"><i class="fa fa-trash"></i></button>
       </div></td>
     </tr>`;
@@ -514,10 +553,44 @@ function actualizarStats(lista) {
   const activos   = lista.filter(c => estadoCliente(c) === 'active').length;
   const inactivos = lista.filter(c => estadoCliente(c) === 'inactive').length;
   const vencidos  = lista.filter(c => estadoCliente(c) === 'expired').length;
+  // Próximos a vencer: activos con vencimiento en <= 15 días
+  const proximos = lista.filter(c => {
+    const d = diasRestantes(c.vencimiento);
+    return d !== null && d >= 0 && d <= 15 && estadoCliente(c) === 'active';
+  });
   document.getElementById('stat-total').textContent    = lista.length;
   document.getElementById('stat-active').textContent   = activos;
   document.getElementById('stat-inactive').textContent = inactivos;
   document.getElementById('stat-expired').textContent  = vencidos;
+  document.getElementById('stat-proximos').textContent = proximos.length || '0';
+
+  // Renderizar bloque de alertas
+  const bloque = document.getElementById('alertas-vencimiento');
+  if (proximos.length > 0) {
+    bloque.style.display = 'block';
+    document.getElementById('alerta-count').textContent = proximos.length + ' cliente(s)';
+    document.getElementById('alertas-lista').innerHTML = proximos.map(c => {
+      const dias = diasRestantes(c.vencimiento);
+      const urgencia = dias <= 3 ? '#ef4444' : dias <= 7 ? '#f97316' : 'var(--gold)';
+      return `<div style="display:flex;align-items:center;justify-content:space-between;background:rgba(0,0,0,.2);border-radius:9px;padding:10px 14px;flex-wrap:wrap;gap:8px">
+        <div>
+          <span style="font-weight:700;color:var(--text)">${c.nombre}</span>
+          <span style="color:var(--text3);font-size:.8rem;margin-left:8px">${c.email}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="color:${urgencia};font-weight:700;font-size:.85rem">${dias === 0 ? '¡Vence hoy!' : `Vence en ${dias} día${dias===1?'':'s'} (${c.vencimiento})`}</span>
+          <button onclick="renovarCliente('${c.id}','${c.nombre}','${c.email}')" style="background:rgba(37,211,102,.15);color:#25d366;border:1px solid rgba(37,211,102,.3);border-radius:7px;padding:5px 12px;font-size:.78rem;font-weight:700;cursor:pointer;font-family:inherit">
+            🔄 Renovar
+          </button>
+          <button onclick="wspRenovacion('${c.nombre}','${c.email}',${dias})" style="background:rgba(37,211,102,.25);color:#25d366;border:1px solid rgba(37,211,102,.4);border-radius:7px;padding:5px 12px;font-size:.78rem;font-weight:700;cursor:pointer;font-family:inherit">
+            📲 WhatsApp
+          </button>
+        </div>
+      </div>`;
+    }).join('');
+  } else {
+    bloque.style.display = 'none';
+  }
 }
 
 window.filtrarTabla = function() {
@@ -533,6 +606,42 @@ window.toggleCliente = async function(uid, nuevoEstado) {
     await updateDoc(doc(db, 'clientes', uid), { activo: nuevoEstado });
     await cargarClientes();
   } catch(e) { alert('Error: ' + e.message); }
+};
+
+// Modal de renovación
+window.renovarCliente = function(uid, nombre, email) {
+  const plan = prompt(`Renovar plan de ${nombre}
+
+Ingresa los días a agregar:
+30 = 1 mes
+90 = 3 meses
+180 = 6 meses
+365 = 1 año`, '30');
+  if (!plan || isNaN(parseInt(plan))) return;
+  const dias = parseInt(plan);
+  const nuevaFecha = new Date();
+  nuevaFecha.setDate(nuevaFecha.getDate() + dias);
+  const nuevoVenc = nuevaFecha.toISOString().split('T')[0];
+  if (!confirm(`¿Renovar acceso de ${nombre} hasta ${nuevoVenc}?`)) return;
+  updateDoc(doc(db, 'clientes', uid), { vencimiento: nuevoVenc, activo: true })
+    .then(() => { cargarClientes(); alert(`✅ Renovado hasta ${nuevoVenc}`); })
+    .catch(e => alert('Error: ' + e.message));
+};
+
+// WhatsApp de recordatorio de renovación
+window.wspRenovacion = function(nombre, email, dias) {
+  const urgencia = dias <= 1 ? '¡Hoy es el último día!' : `vence en *${dias} día${dias===1?'':'s'}*`;
+  const msg = `Hola *${nombre}* 👋
+
+Te recuerdo que tu suscripción a *FinControl* ${urgencia}.
+
+Para continuar disfrutando del sistema sin interrupciones, te invito a renovar tu plan.
+
+🔗 *Acceso:* https://evermestra23.github.io/fincontrol-app/
+📧 *Tu usuario:* ${email}
+
+¡Estoy a tu disposición para cualquier consulta! 😊`;
+  window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
 };
 
 window.eliminarCliente = async function(uid, nombre) {
